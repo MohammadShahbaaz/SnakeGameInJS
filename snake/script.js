@@ -1,277 +1,226 @@
 window.addEventListener("load", main);
 
-// Canvas:
-var canvas;
-var ctx;
-var pauseButton;
-var scorelabel;
+// Canvas and game constants
+let canvas, ctx, pauseButton, scoreLabel;
+const TILE_SIZE = 20;
+const FPS = 10;
 
-// Game:
-var timer;
-var fps = 10;
+// Game variables
+let timer = -1;
+let vx = 0, vy = 0;
+let snakeHeadX, snakeHeadY;
+let tailLength = 5;
+let snakeTrail = [];
+let appleX, appleY;
+let score = 0;
 
-// Board:
-var ts = 20;
-var gw = gh = 20;
-
-// Snake:
-var vx = vy = 0;
-var sx = sy = 10;
-var px = py = 10;
-var tail = 5;
-var trail = [];
-
-// Apple:
-var ax = ay = 15;
-var score = 0;
-
-// Swipe gestures:
-var xdown = ydown = null;
+// Swipe gestures
+let touchStartX = null, touchStartY = null;
 
 function main() {
-	canvas = document.getElementById("canvas");
-	ctx = canvas.getContext("2d");
-	pauseButton = document.getElementById("pause-button");
-	scorelabel = document.getElementById("score-label");
-
-	resizegame();
-
-	sx = Math.floor(gw / 2);
-	sy = Math.floor(gh / 2);
-
-	window.addEventListener("resize", resizegame);
-
-	document.addEventListener("keydown", keypress);
-
-	canvas.addEventListener("touchstart", touchdown, false);
-	canvas.addEventListener("touchmove", touchmove, false);
-
-	pauseButton.addEventListener("click", togglepause);
-
-	start();
+    initializeCanvas();
+    setupEventListeners();
+    startGame();
 }
 
-function touchdown(e) {
-	const firsttouch = e.touches[0];
-	xdown = firsttouch.clientX;
-	ydown = firsttouch.clientY;
+function initializeCanvas() {
+    canvas = document.getElementById("canvas");
+    ctx = canvas.getContext("2d");
+    pauseButton = document.getElementById("pause-button");
+    scoreLabel = document.getElementById("score-label");
+
+    resizeCanvas();
 }
 
-function touchmove(e) {
-	if (!xdown || !ydown) {
-		return;
-	}
-
-	var xup = e.touches[0].clientX;
-	var yup = e.touches[0].clientY;
-
-	var xdiff = xdown - xup;
-	var ydiff = ydown - yup;
-
-	var direction;
-	if (Math.abs(xdiff) > Math.abs(ydiff)) {
-		if (xdiff > 0) {
-			direction = "left";
-		} else {
-			direction = "right";
-		}
-	} else {
-		if (ydiff > 0) {
-			direction = "up";
-		} else {
-			direction = "down";
-		}
-	}
-
-	handleSwipe(direction);
-
-	xdown = ydown = null;
+function setupEventListeners() {
+    window.addEventListener("resize", resizeCanvas);
+    document.addEventListener("keydown", handleKeyPress);
+    canvas.addEventListener("touchstart", handleTouchStart, false);
+    canvas.addEventListener("touchmove", handleTouchMove, false);
+    pauseButton.addEventListener("click", togglePause);
 }
 
-function handleSwipe(direction) {
-	switch (direction) {
-		case "left":
-			if (vx != 0) {
-				break;
-			}
-			vx = -1;
-			vy = 0;
-			break;
-		case "up":
-			if (vy != 0) {
-				break;
-			}
-			vx = 0;
-			vy = -1;
-			break;
-		case "right":
-			if (vx != 0) {
-				break;
-			}
-			vx = 1;
-			vy = 0;
-			break;
-		case "down":
-			if (vy != 0) {
-				break;
-			}
-			vx = 0;
-			vy = 1;
-			break;
-	}
+function handleTouchStart(e) {
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
 }
 
-function start() {
-	tail = 5;
-	trail = []
-	px = sx;
-	py = sy;
-	for (var i = 0; i < 5; i++) {
-		trail.push({x: px, y: py + 5 - i});
-	}
-	vx = 0;
-	vy = -1;
+function handleTouchMove(e) {
+    if (touchStartX === null || touchStartY === null) return;
 
-	ax = Math.floor(Math.random() * gw);
-	ay = Math.floor(Math.random() * gh);
+    const touch = e.touches[0];
+    const xDiff = touchStartX - touch.clientX;
+    const yDiff = touchStartY - touch.clientY;
 
-	play();
+    const direction = Math.abs(xDiff) > Math.abs(yDiff)
+        ? (xDiff > 0 ? "left" : "right")
+        : (yDiff > 0 ? "up" : "down");
+
+    changeDirectionBasedOnSwipe(direction);
+
+    touchStartX = touchStartY = null;
 }
 
-function update() {
-	px += vx;
-	py += vy;
-
-	if (px < 0 || px >= gw || py < 0 || py >= gh) {
-		die();
-	}
-
-	for (var i = 0; i < trail.length; i++) {
-		if (px == trail[i].x && py == trail[i].y) {
-			die();
-		}
-	}
-
-	trail.push({x: px, y: py});
-	while (trail.length > tail) {
-		trail.shift();
-	}
-
-	if (px == ax && py == ay) {
-		gotapple();
-	}
+function changeDirectionBasedOnSwipe(direction) {
+    switch (direction) {
+        case "left":
+            if (vx === 0) { vx = -1; vy = 0; }
+            break;
+        case "up":
+            if (vy === 0) { vx = 0; vy = -1; }
+            break;
+        case "right":
+            if (vx === 0) { vx = 1; vy = 0; }
+            break;
+        case "down":
+            if (vy === 0) { vx = 0; vy = 1; }
+            break;
+    }
 }
 
-function render() {
-	ctx.fillStyle = "black";
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
-	
-	ctx.fillStyle = "red";
-	ctx.fillRect(ax * ts, ay * ts, ts - 2, ts - 2);
-
-	ctx.fillStyle = "lime";
-	for (var i = 0; i < trail.length; i++) {
-		ctx.fillRect(trail[i].x * ts, trail[i].y * ts, ts - 2, ts - 2);
-	}
+function startGame() {
+    resetGame();
+    gameLoop();
 }
 
-function keypress(e) {
-	if (timer == -1 && e.keyCode != 32) {
-		return;
-	}
-	switch (e.keyCode) {
-		case 32:
-			togglepause();
-			break;
-		case 37:
-			if (vx != 0) {
-				break;
-			}
-			vx = -1;
-			vy = 0;
-			break;
-		case 38:
-			if (vy != 0) {
-				break;
-			}
-			vx = 0;
-			vy = -1;
-			break;
-		case 39:
-			if (vx != 0) {
-				break;
-			}
-			vx = 1;
-			vy = 0;
-			break;
-		case 40:
-			if (vy != 0) {
-				break;
-			}
-			vx = 0;
-			vy = 1;
-			break;
-	}
+function resetGame() {
+    score = 0;
+    tailLength = 5;
+    snakeTrail = [];
+    snakeHeadX = Math.floor(gridWidth / 2);
+    snakeHeadY = Math.floor(gridHeight / 2);
+    vx = 0;
+    vy = -1;
+
+    for (let i = 0; i < tailLength; i++) {
+        snakeTrail.push({ x: snakeHeadX, y: snakeHeadY + 5 - i });
+    }
+
+    spawnApple();
 }
 
-function gotapple() {
-	tail++;
-	score++;
-	scorelabel.innerHTML = "Score: " + score;
-	ax = Math.floor(Math.random() * gw);
-	ay = Math.floor(Math.random() * gh);
+function spawnApple() {
+    appleX = Math.floor(Math.random() * gridWidth);
+    appleY = Math.floor(Math.random() * gridHeight);
 }
 
-function die() {
-	score = 0;
-	scorelabel.innerHTML = "Score: 0";
-	tail = 5;
-	trail = []
-	px = sx;
-	py = sy;
-	for (var i = 0; i < 5; i++) {
-		trail.push({x: px, y: py + 5 - i});
-	}
-	vx = 0;
-	vy = -1;
+function updateGame() {
+    snakeHeadX += vx;
+    snakeHeadY += vy;
+
+    if (isOutOfBounds() || isCollidingWithSelf()) {
+        handleGameOver();
+        return;
+    }
+
+    updateSnakeTrail();
+    checkAppleCollision();
 }
 
-function pause() {
-	clearInterval(timer);
-	timer = -1;
-	pauseButton.innerHTML = "play_circle_outline";
+function isOutOfBounds() {
+    return snakeHeadX < 0 || snakeHeadX >= gridWidth || snakeHeadY < 0 || snakeHeadY >= gridHeight;
 }
 
-function play() {
-	timer = setInterval(function() {
-		update();
-		render();
-	}, 1000 / fps);
-	pauseButton.innerHTML = "pause_circle_outline";
+function isCollidingWithSelf() {
+    return snakeTrail.some(segment => segment.x === snakeHeadX && segment.y === snakeHeadY);
 }
 
-function togglepause() {
-	if (timer == -1) {
-		play();
-	} else {
-		pause();
-	}
+function updateSnakeTrail() {
+    snakeTrail.push({ x: snakeHeadX, y: snakeHeadY });
+    if (snakeTrail.length > tailLength) {
+        snakeTrail.shift();
+    }
 }
 
-function resizegame() {
-	canvas.width = window.innerWidth - 2;
-	canvas.height = window.innerHeight - 2;
-
-	gw = Math.floor(canvas.width / ts);
-	gh = Math.floor(canvas.height / ts);
-
-	canvas.width -= canvas.width - (gw * ts);
-	canvas.height -= canvas.height - (gh * ts);
-
-	if (ax >= gw) {
-		ax = Math.floor(Math.random() * gw);
-	}
-	if (ay >= gh) {
-		ay = Math.floor(Math.random() * gh);
-	}
+function checkAppleCollision() {
+    if (snakeHeadX === appleX && snakeHeadY === appleY) {
+        tailLength++;
+        score++;
+        scoreLabel.innerText = `Score: ${score}`;
+        spawnApple();
+    }
 }
+
+function drawGame() {
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "red";
+    ctx.fillRect(appleX * TILE_SIZE, appleY * TILE_SIZE, TILE_SIZE - 2, TILE_SIZE - 2);
+
+    ctx.fillStyle = "lime";
+    snakeTrail.forEach(segment => {
+        ctx.fillRect(segment.x * TILE_SIZE, segment.y * TILE_SIZE, TILE_SIZE - 2, TILE_SIZE - 2);
+    });
+}
+
+function gameLoop() {
+    if (timer === -1) return;
+
+    updateGame();
+    drawGame();
+}
+
+function handleKeyPress(e) {
+    if (timer === -1 && e.keyCode !== 32) return;
+
+    switch (e.keyCode) {
+        case 32: // Space key
+            togglePause();
+            break;
+        case 37: // Left arrow key
+            if (vx === 0) { vx = -1; vy = 0; }
+            break;
+        case 38: // Up arrow key
+            if (vy === 0) { vx = 0; vy = -1; }
+            break;
+        case 39: // Right arrow key
+            if (vx === 0) { vx = 1; vy = 0; }
+            break;
+        case 40: // Down arrow key
+            if (vy === 0) { vx = 0; vy = 1; }
+            break;
+    }
+}
+
+function handleGameOver() {
+    score = 0;
+    scoreLabel.innerText = "Score: 0";
+    resetGame();
+}
+
+function pauseGame() {
+    clearInterval(timer);
+    timer = -1;
+    pauseButton.innerText = "play_circle_outline";
+}
+
+function resumeGame() {
+    timer = setInterval(gameLoop, 1000 / FPS);
+    pauseButton.innerText = "pause_circle_outline";
+}
+
+function togglePause() {
+    if (timer === -1) {
+        resumeGame();
+    } else {
+        pauseGame();
+    }
+}
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth - 2;
+    canvas.height = window.innerHeight - 2;
+
+    gridWidth = Math.floor(canvas.width / TILE_SIZE);
+    gridHeight = Math.floor(canvas.height / TILE_SIZE);
+
+    canvas.width = gridWidth * TILE_SIZE;
+    canvas.height = gridHeight * TILE_SIZE;
+
+    if (appleX >= gridWidth) spawnApple();
+    if (appleY >= gridHeight) spawnApple();
+}
+
+let gridWidth, gridHeight;
